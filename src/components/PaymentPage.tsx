@@ -1,39 +1,30 @@
 import React, { useState } from 'react';
-import { useStore } from '../store/useStore';
 import { useWeb3 } from '../context/Web3Context';
 import { ethers } from 'ethers';
 import { Button, TextField, Typography, Box, Paper } from '@mui/material';
-import { Link } from 'react-router-dom';
 
 const PaymentPage: React.FC = () => {
   const { connect, disconnect, account, balance, isConnected } = useWeb3();
-  const { cart } = useStore();
+  const [amount, setAmount] = useState('');
+  const [recipient, setRecipient] = useState('');
   const [error, setError] = useState('');
-
-  // Calculate total from cart
-  const calculateTotal = () => {
-    return cart.reduce((total, item) => {
-      return total + (item.price || 0) * item.quantity;
-    }, 0);
-  };
-
-  const total = calculateTotal();
 
   const handlePayment = async () => {
     try {
       if (!window.ethereum) {
-        throw new Error('MetaMask is not installed');
+        throw new Error('MetaMask is not installed/active');
+      }
+
+      if (!amount || !recipient) {
+        throw new Error('Please fill in all fields');
       }
 
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
 
-      // Convert USD to ETH (you'll need to implement actual conversion rate)
-      const ethAmount = (total / 2000).toString(); // Example conversion rate
-
       const tx = await signer.sendTransaction({
-        to: '0xYourStoreAddress', // Replace with your store's Ethereum address
-        value: ethers.utils.parseEther(ethAmount),
+        to: recipient,
+        value: ethers.utils.parseEther(amount),
       });
 
       await tx.wait();
@@ -50,10 +41,6 @@ const PaymentPage: React.FC = () => {
           Ethereum Payment
         </Typography>
 
-        <Typography variant="h6" gutterBottom>
-          Total Amount: ${total.toFixed(2)}
-        </Typography>
-
         {!isConnected ? (
           <Button
             variant="contained"
@@ -66,11 +53,25 @@ const PaymentPage: React.FC = () => {
         ) : (
           <>
             <Typography variant="body1" gutterBottom>
-              Connected Account: {account}
+              Welcome to the payment page. Buy your favorite products using your Sepolia Ethereum crypto currency tokens via Blockchain.
             </Typography>
-            <Typography variant="body1" gutterBottom>
-              Balance: {balance} ETH
-            </Typography>
+
+            <TextField
+              label="Amount (ETH)"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              fullWidth
+              margin="normal"
+              type="number"
+            />
+
+            <TextField
+              label="Recipient Address"
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+              fullWidth
+              margin="normal"
+            />
 
             {error && (
               <Typography color="error" sx={{ mt: 2 }}>
@@ -85,7 +86,7 @@ const PaymentPage: React.FC = () => {
               fullWidth
               sx={{ mt: 2 }}
             >
-              Pay with ETH
+              Send Payment
             </Button>
 
             <Button
@@ -99,16 +100,6 @@ const PaymentPage: React.FC = () => {
             </Button>
           </>
         )}
-
-        <Button
-          component={Link}
-          to="/cart"
-          variant="outlined"
-          fullWidth
-          sx={{ mt: 2 }}
-        >
-          Back to Cart
-        </Button>
       </Paper>
     </Box>
   );

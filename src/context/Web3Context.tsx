@@ -1,10 +1,16 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import { useWeb3React } from '@web3-react/core';
+import { InjectedConnector } from '@web3-react/injected-connector';
+
+export const injected = new InjectedConnector({
+  supportedChainIds: [1, 3, 4, 5, 42] // Ethereum mainnet and testnets
+});
 
 interface Web3ContextType {
   connect: () => Promise<void>;
   disconnect: () => void;
-  account: string | null;
+  account: string | null | undefined;
   balance: string;
   isConnected: boolean;
 }
@@ -17,79 +23,53 @@ const Web3Context = createContext<Web3ContextType>({
   isConnected: false,
 });
 
-export const useWeb3 = () => useContext(Web3Context);
-
-export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [account, setAccount] = useState<string | null>(null);
-  const [balance, setBalance] = useState<string>('0');
-  const [isConnected, setIsConnected] = useState<boolean>(false);
+export const Web3Provider = ({ children }: { children: React.ReactNode }) => {
+  const { activate, deactivate, account, library } = useWeb3React();
+  const [balance, setBalance] = useState('0');
+  const [isConnected, setIsConnected] = useState(false);
 
   const connect = async () => {
     try {
-      if (!window.ethereum) {
-        throw new Error('MetaMask is not installed');
-      }
-
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const balance = await provider.getBalance(accounts[0]);
-
-      setAccount(accounts[0]);
-      setBalance(ethers.utils.formatEther(balance));
+      await activate(injected);
       setIsConnected(true);
     } catch (error) {
-      console.error('Error connecting to MetaMask:', error);
-      throw error;
+      console.error('Failed to connect:', error);
     }
   };
 
   const disconnect = () => {
-    setAccount(null);
-    setBalance('0');
-    setIsConnected(false);
+    try {
+      deactivate();
+      setIsConnected(false);
+    } catch (error) {
+      console.error('Failed to disconnect:', error);
+    }
   };
 
   useEffect(() => {
-    const checkConnection = async () => {
-      if (window.ethereum) {
-        try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts.length > 0) {
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            const balance = await provider.getBalance(accounts[0]);
-            setAccount(accounts[0]);
-            setBalance(ethers.utils.formatEther(balance));
-            setIsConnected(true);
-          }
-        } catch (error) {
-          console.error('Error checking MetaMask connection:', error);
-        }
+    const getBalance = async () => {
+      if (account && library) {
+        const balance = await library.getBalance(account);
+        setBalance(ethers.utils.formatEther(balance));
       }
     };
 
-    checkConnection();
-
-    // Listen for account changes
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', (accounts: string[]) => {
-        if (accounts.length === 0) {
-          disconnect();
-        } else {
-          setAccount(accounts[0]);
-        }
-      });
-    }
-
-    return () => {
-      if (window.ethereum) {
-        window.ethereum.removeAllListeners('accountsChanged');
-      }
-    };
-  }, []);
+    getBalance();
+  }, [account, library]);
 
   return (
-    <Web3Context.Provider value={{ connect, disconnect, account, balance, isConnected }}>
+    <Web3Context.Provider
+      value={{
+        connect,
+        disconnect,
+        account,
+        balance,
+        isConnected,
+      }}
+    >
       {children}
     </Web3Context.Provider>
   );
-}; 
+};
+
+export const useWeb3 = () => useContext(Web3Context); 
